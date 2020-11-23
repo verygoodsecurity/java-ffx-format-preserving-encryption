@@ -1,0 +1,125 @@
+version: 2.1
+
+parameters:
+  aws_account_id:
+    description: ""
+    type: string
+    default: "883127560329"
+  aws_profile:
+    description: ""
+    type: string
+    default: "dev/vault"
+  aws_region:
+    description: ""
+    type: string
+    default: "us-west-2"
+  aws_role:
+    description: ""
+    type: string
+    default: "arn:aws:iam::883127560329:role/VGSStageDeploy"
+  cache_key_prefix:
+    description: ""
+    type: string
+    default: "ffx"
+
+commands:
+  maven:
+    description: "Run Maven"
+    parameters:
+      goals:
+        description: "The Maven goals to run."
+        type: string
+        default: "clean verify site"
+      executable:
+        description: "The Maven executable."
+        type: string
+        default: "mvn"
+    steps:
+      - run:
+          command: << parameters.executable >> << parameters.goals >>
+
+jobs:
+  "setup":
+    description: "make Maven configuration files"
+    docker:
+      - image: "maven:3.6-openjdk-8"
+    environment:
+      AWS_ACCOUNT_ID: << pipeline.parameters.aws_account_id >>
+      AWS_PROFILE: << pipeline.parameters.aws_profile >>
+      AWS_DEFAULT_REGION: << pipeline.parameters.aws_region >>
+      AWS_REGION: << pipeline.parameters.aws_region >>
+    steps:
+      - run:
+          name: "Generate Maven settings."
+          command: |
+            #!/usr/bin/env bash
+            mkdir -p ~/.m2
+      - run:
+          name: "Generate AWS credentials file"
+          command: |
+            #!/usr/bin/env bash
+            mkdir -p ~/.aws
+            echo "
+            [default]
+            region = << pipeline.parameters.aws_region >>
+            aws_access_key_id = $AWS_ACCESS_KEY_ID
+            aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
+
+            [dev/vault]
+            region = << pipeline.parameters.aws_region >>
+            role_arn = << pipeline.parameters.aws_role >>
+            source_profile = default
+            " >> ~/.aws/credentials
+      - persist_to_workspace:
+          root: "~"
+          paths:
+            - ".m2"
+            - ".aws"
+  "build":
+    description: "foo"
+    docker:
+      - image: "maven:3.6-openjdk-8"
+    environment:
+      AWS_ACCOUNT_ID: << pipeline.parameters.aws_account_id >>
+      AWS_PROFILE: << pipeline.parameters.aws_profile >>
+      AWS_DEFAULT_REGION: << pipeline.parameters.aws_region >>
+      AWS_REGION: << pipeline.parameters.aws_region >>
+    steps:
+      - attach_workspace:
+          at: "~"
+      - checkout:
+          path: "."
+      - restore_cache:
+          name: "Restoring Cache"
+          keys:
+            - maven-<< pipeline.parameters.aws_account_id >>-{{ checksum "pom.xml" }}
+            - "maven-<< pipeline.parameters.aws_account_id >>"
+            - "maven"
+      - maven:
+          goals: "dependency:go-offline"
+      - maven:
+          goals: "clean verify"
+      - store_test_results:
+          path: "target/surefire-reports"
+      - maven:
+          goals: "site"
+      - store_artifacts:
+          path: "target"
+      - maven:
+          goals: "deploy"
+      - save_cache:
+          name: "Saving Cache"
+          when: "always"
+          key: maven-<< pipeline.parameters.aws_account_id >>-{{ checksum "pom.xml" }}
+          paths:
+            - "~/.m2/repository"
+
+workflows:
+  version: 2
+  "java-build":
+    jobs:
+      - "setup":
+          context: artifact-publisher
+      - "build":
+          requires:
+            - "setup"
