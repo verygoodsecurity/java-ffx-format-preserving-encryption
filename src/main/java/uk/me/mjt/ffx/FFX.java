@@ -18,7 +18,7 @@ public class FFX {
     private final byte RADIX_TEN = 10;
     private final byte ROUNDS_TEN = 10;
     
-    BigInteger encrypt(byte[] aesKey, byte[] T, BigInteger X, int n, StringBuilder log) {
+    public BigInteger encrypt(byte[] aesKey, byte[] T, BigInteger X, int n, StringBuilder log) {
         int l = (n+1)/2;
         BigInteger bMagnitude = BigInteger.TEN.pow(l);
         BigInteger aMagnitude = BigInteger.TEN.pow(n-l);
@@ -61,7 +61,7 @@ public class FFX {
         return encrypted;
     }
     
-    BigInteger decrypt(byte[] aesKey, byte[] T, BigInteger Y, int n, StringBuilder log) {
+    public BigInteger decrypt(byte[] aesKey, byte[] T, BigInteger Y, int n, StringBuilder log) {
         int l = (n+1)/2;
         BigInteger bMagnitude = BigInteger.TEN.pow(l);
         BigInteger aMagnitude = BigInteger.TEN.pow(n-l);
